@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: elk-stack
+  annotations:
+    ingress.kubernetes.io/force-ssl-redirect: "true"
+    kubernetes.io/ingress.class: contour
+    kubernetes.io/tls-acme: "true"
+    ingress.kubernetes.io/rewrite-target: /
+#    certmanager.k8s.io/issuer: "letsencrypt-staging"
+spec:
+  tls:
+  - secretName: tanzu-system-ingress/wild-tls
+    hosts:
+    - elk-stack.cnd.lab
+  rules:
+  - host: elk-stack.cnd.lab
+    http:
+      paths:
+      - path: /el
+        pathType: Prefix
+        backend:
+          serviceName: elastic-ss-es-http
+          servicePort: 9200
+      - path: /ki
+        pathType: Prefix
+        backend:
+          serviceName: kibana-ss-kb-http
+          servicePort: 5601

@@ -1,0 +1,3 @@
+log-verbosity: 2
+metrics-port: 6060
+namespaces: [ns1, ns2, ns3]

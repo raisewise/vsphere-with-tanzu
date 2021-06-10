@@ -1,0 +1,103 @@
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: elastic-ss
+spec:
+  version: 7.12.1
+  nodeSets:
+  - name: master
+    count: 1
+    config:
+      node.roles: ["master", "ml"]
+    podTemplate:
+      metadata:
+        labels:
+          app: elasticsearch
+      spec:
+        initContainers:
+        - name: sysctl
+          securityContext:
+            privileged: true
+          command: ['sh', '-c', 'sysctl -w vm.max_map_count=262144']
+        containers:
+        - name: elasticsearch
+          resources:
+            limits:
+              memory: 4Gi
+              cpu: 1
+          env:
+          - name: ES_JAVA_OPTS
+            value: "-Xms2g -Xmx2g"
+    volumeClaimTemplates:
+    - metadata:
+        name: elasticsearch-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 3Gi
+        storageClassName: tanzu-storage-policy
+  - name: data
+    count: 2
+    config:
+      node.roles: ["data", "ingest", "ml"]
+    podTemplate:
+      metadata:
+        labels:
+          app: elasticsearch
+      spec:
+        initContainers:
+        - name: sysctl
+          securityContext:
+            privileged: true
+          command: ['sh', '-c', 'sysctl -w vm.max_map_count=262144']
+        containers:
+        - name: elasticsearch
+          resources:
+            limits:
+              memory: 4Gi
+              cpu: 1
+          env:
+          - name: ES_JAVA_OPTS
+            value: "-Xms2g -Xmx2g"
+    volumeClaimTemplates:
+    - metadata:
+        name: elasticsearch-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 5Gi
+        storageClassName: tanzu-storage-policy
+  http:
+    service:
+      spec:
+        selector:
+          elasticsearch.k8s.elastic.co/cluster-name: "elastic-ss"
+          elasticsearch.k8s.elastic.co/node-master: "false"    
+    tls:
+      selfSignedCertificate:
+        disabled: true
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: elastic-ss
+  annotations:
+    ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+spec:
+  tls:
+  - secretName: tanzu-system-ingress/wild-tls
+    hosts:
+    - elastic-ss.cnd.lab
+  rules:
+  - host: elastic-ss.cnd.lab
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: elastic-ss-es-http
+          servicePort: 9200

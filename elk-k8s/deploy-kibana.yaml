@@ -1,0 +1,40 @@
+apiVersion: kibana.k8s.elastic.co/v1
+kind: Kibana
+metadata:
+  name: kibana-ss
+spec:
+  version: 7.12.1
+  count: 1
+  config:
+    elasticsearch.hosts:
+      - https://elastic-ss-es-http:9200
+    elasticsearch.username: elastic
+  secureSettings:
+    - secretName: kibana-elasticsearch-credentials
+  http:
+    tls:
+      selfSignedCertificate:
+        disabled: true
+  elasticsearchRef:
+    name: elastic-ss
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: kibana-ss
+  annotations:
+    ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+spec:
+  tls:
+    - secretName: tanzu-system-ingress/wild-tls
+      hosts:
+        - kibana-ss.cnd.lab
+  rules:
+    - host: kibana-ss.cnd.lab
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: kibana-ss-kb-http
+              servicePort: 5601
