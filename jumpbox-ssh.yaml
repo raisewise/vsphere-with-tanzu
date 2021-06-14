@@ -24,4 +24,4 @@ spec:
   volumes:
   - name: ssh-key
     secret:
-      secretName: elk-cluster-ssh
+      secretName: ss-test-cluster-ssh

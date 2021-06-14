@@ -5,7 +5,7 @@ metadata:
   namespace: ss-infra
 spec:
   distribution:
-    version: v1.18.5+vmware.1-tkg.1.c40d30d
+    version: v1.20.2
   topology:
     controlPlane:
       count: 1
