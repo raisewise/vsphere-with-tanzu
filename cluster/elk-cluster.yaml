@@ -15,6 +15,11 @@ spec:
       count: 3
       class: best-effort-xlarge
       storageClass: tanzu-storage-policy
+      volumes: 
+        - name: containerd
+          mountPath: /var/lib/containerd
+          capacity:
+            storage: 16Gi
   settings:
     storage:
       defaultClass: tanzu-storage-policy
