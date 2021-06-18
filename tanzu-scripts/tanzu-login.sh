@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# 숫자만 저장
+#VER=kubectl version | grep '^Client' | awk -F, '{print $2}'
+#VERSION=`kubectl version | grep '^Client' | awk -F, '{print $2}' | awk -F: '{print $2}'`
+
 echo -e "Tanzu Namespace : \c "
 read -a NAMESPACE
 echo -e "Tanzu Cluster : \c "

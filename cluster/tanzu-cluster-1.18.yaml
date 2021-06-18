@@ -1,8 +1,8 @@
 apiVersion: run.tanzu.vmware.com/v1alpha1
 kind: TanzuKubernetesCluster
 metadata:
-  name: cnd-infra-cluster
-  namespace: cnd-infra
+  name: elk-cluster-test
+  namespace: elk-stack
 spec:
   distribution:
     version: v1.18.5+vmware.1-tkg.1.c40d30d
@@ -11,10 +11,20 @@ spec:
       count: 1
       class: best-effort-small
       storageClass: tanzu-storage-policy
+      # volumes: 
+      #   - name: etcd
+      #     mountPath: /var/lib/etcd
+      #     capacity:
+      #       storage: 4Gi
     workers:
       count: 3
       class: best-effort-large
       storageClass: tanzu-storage-policy
+      volumes: 
+        - name: containerd
+          mountPath: /var/lib/containerd
+          capacity:
+            storage: 16Gi
   settings:
     storage:
       defaultClass: tanzu-storage-policy
