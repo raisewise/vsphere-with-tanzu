@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: jumpbox
+spec:
+  imagePullSecrets:
+  - name: embeded-harbor-secret
+  containers:
+  - name: jumpbox
+    image: "10.30.10.2/ss-infra/photon-cm:3.0_dev"
+    command: [ "/bin/bash", "-c", "--" ]
+    args: [ "mkdir /root/.ssh; cp /root/ssh/ssh-privatekey /root/.ssh/id_rsa; chmod 600 /root/.ssh/id_rsa; while true; do sleep 30; done;" ]
+    volumeMounts:
+      - mountPath: "/root/ssh"
+        name: ssh-key
+        readOnly: true
+    resources:
+        requests:
+          memory: "1024Mi"
+          cpu: "500m"
+        limits:
+          memory: "2048Mi"
+          cpu: "1000m"
+  volumes:
+  - name: ssh-key
+    secret:
+      secretName: elk-cluster-u2-ssh
