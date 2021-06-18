@@ -11,7 +11,7 @@ stty echo
 
 SERVER='https://10.30.10.1'
 USER='administrator@vsphere.local'
-KUBECTL_VSPHERE_PASSWORD=$PWD
+export KUBECTL_VSPHERE_PASSWORD=$PWD
 #NAMESPACE='ss-infra'
 #CLUSTER='ss-infra-cluster'
 #SECURE_SKIP='--insecure-skip-tls-verify'
