@@ -1,8 +1,8 @@
 apiVersion: run.tanzu.vmware.com/v1alpha1
 kind: TanzuKubernetesCluster
 metadata:
-  name: elk-cluster-test
-  namespace: elk-stack
+  name: cnd-cluster
+  namespace: cnd-infra
 spec:
   distribution:
     version: v1.18.5+vmware.1-tkg.1.c40d30d
