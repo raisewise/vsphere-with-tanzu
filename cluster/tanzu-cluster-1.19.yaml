@@ -1,8 +1,8 @@
 apiVersion: run.tanzu.vmware.com/v1alpha1
 kind: TanzuKubernetesCluster
 metadata:
-  name: elk-cluster-u2
-  namespace: elk-stack
+  name: new-tkc1
+  namespace: cnd-infra
 spec:
   distribution:
     version: 1.19.7+vmware.1-tkg.1.fc82c41

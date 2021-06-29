@@ -7,7 +7,7 @@ spec:
   - name: embeded-harbor-secret
   containers:
   - name: jumpbox
-    image: "10.30.10.2/ss-infra/photon-cm:3.0_dev"
+    image: "10.30.10.4/cnd-infra/photon-cm:3.0_dev"
     command: [ "/bin/bash", "-c", "--" ]
     args: [ "mkdir /root/.ssh; cp /root/ssh/ssh-privatekey /root/.ssh/id_rsa; chmod 600 /root/.ssh/id_rsa; while true; do sleep 30; done;" ]
     volumeMounts:
@@ -24,4 +24,4 @@ spec:
   volumes:
   - name: ssh-key
     secret:
-      secretName: elk-cluster-u2-ssh
+      secretName: new-tkc1-ssh
