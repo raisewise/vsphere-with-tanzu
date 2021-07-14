@@ -24,4 +24,4 @@ spec:
   volumes:
   - name: ssh-key
     secret:
-      secretName: new-tkc1-ssh
+      secretName: cnd-cluster-ssh

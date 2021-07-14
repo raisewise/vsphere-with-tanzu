@@ -1,0 +1,19 @@
+#@data/values
+#@overlay/match-child-defaults missing_ok=True
+---
+infrastructure_provider: "vsphere"
+contour:
+  image:
+    repository: registry.tkg.vmware.run
+    name: contour
+    tag: v1.8.1_vmware.1
+envoy:
+  image:
+    repository: registry.tkg.vmware.run
+    name: envoy
+    tag: v1.15.0_vmware.1
+  service:
+    type: LoadBalancer
+    externalTrafficPolicy: Cluster
+    disableWait: false
+  loglevel: info

@@ -5,7 +5,7 @@ metadata:
   namespace: cnd-infra
 spec:
   distribution:
-    version: 1.19.7+vmware.1-tkg.1.fc82c41
+    version: 1.20.2
   topology:
     controlPlane:
       count: 1
