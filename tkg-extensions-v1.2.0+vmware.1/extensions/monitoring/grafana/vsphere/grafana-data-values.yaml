@@ -63,7 +63,7 @@ monitoring:
       replicas: 1
     ingress:
       enabled: false 
-      virtual_host_fqdn: "grafana.system.tanzu"
+      virtual_host_fqdn: "gra.cnd.lab"
       prefix: "/"
       # [Optional] The certificate for the ingress if you want to use your own TLS certificate.
       # We will issue the certificate by cert-manager when it's empty.

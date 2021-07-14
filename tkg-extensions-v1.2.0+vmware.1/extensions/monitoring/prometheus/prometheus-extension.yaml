@@ -35,6 +35,14 @@ spec:
               - tkg-extensions/monitoring/prometheus
             inline:
               paths:
+                update-prometheus-node-exporter-daemonset.yml: |
+                  #@ load("@ytt:overlay", "overlay")
+                  #@overlay/match by=overlay.subset({"kind": "DaemonSet", "metadata": {"name": "prometheus-node-exporter"}})
+                  ---
+                  spec:
+                    template:
+                      spec:
+                        hostNetwork: false
                 update-alertmanager.yaml: |
                   #@ load("@ytt:overlay", "overlay")
                   #@overlay/match by=overlay.subset({"kind": "Deployment", "metadata": {"name": "prometheus-alertmanager"}})
@@ -50,7 +58,7 @@ spec:
                         #@overlay/replace
                         #@overlay/match by="name"
                         - name: prometheus-alertmanager
-                          image: "prom/alertmanager:v0.20.0"
+                          image: registry.tkg.vmware.run/prometheus/alertmanager:v0.20.0_vmware.1
                           imagePullPolicy: "IfNotPresent"
                           args:
                             - --config.file=/etc/config/alertmanager.yml

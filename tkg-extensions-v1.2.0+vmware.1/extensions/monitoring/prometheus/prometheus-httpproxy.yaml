@@ -1,0 +1,17 @@
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: prometheus
+  namespace: tanzu-system-monitoring
+spec:
+  virtualhost:
+    fqdn: pro.cnd.lab
+    tls:
+      secretName: cnd-tls/wild-tls
+  routes:
+    - conditions:
+      - prefix: /
+      services:
+        - name: prometheus-server
+          port: 80
+
