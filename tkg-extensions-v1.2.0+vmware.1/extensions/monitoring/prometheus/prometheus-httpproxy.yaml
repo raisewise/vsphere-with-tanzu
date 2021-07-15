@@ -6,8 +6,8 @@ metadata:
 spec:
   virtualhost:
     fqdn: pro.cnd.lab
-    tls:
-      secretName: cnd-tls/wild-tls
+    # tls:
+    #   secretName: cnd-tls/wild-tls
   routes:
     - conditions:
       - prefix: /

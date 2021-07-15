@@ -922,7 +922,7 @@ monitoring:
         name: email-receiver
         #@overlay/replace
         email_configs: 
-        - to: ""
+        - to: "cnd@etechsystem.co.kr"
           send_resolved: false
           from: from-email@tanzu.com
           smarthost: smtp.example.com:25

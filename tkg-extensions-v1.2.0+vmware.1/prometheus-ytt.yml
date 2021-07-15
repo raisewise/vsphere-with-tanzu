@@ -1,0 +1,1749 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    component: server
+    app: prometheus
+  name: prometheus-server
+  namespace: tanzu-system-monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    component: server
+    app: prometheus
+  name: prometheus-server
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  - nodes/proxy
+  - nodes/metrics
+  - services
+  - endpoints
+  - pods
+  - ingresses
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - extensions
+  resources:
+  - ingresses/status
+  - ingresses
+  verbs:
+  - get
+  - list
+  - watch
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    component: server
+    app: prometheus
+  name: prometheus-server
+subjects:
+- kind: ServiceAccount
+  name: prometheus-server
+  namespace: tanzu-system-monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-server
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    component: server
+    app: prometheus
+  name: prometheus-server
+  namespace: tanzu-system-monitoring
+data:
+  alerting_rules.yml: |
+    groups:
+    - name: prometheus-server-alerting-rules
+      rules:
+      # heartbeat alert
+      - alert: Heartbeat
+        expr: vector(1)
+        labels:
+          severity: informational
+
+      # service availability alert
+      - alert: service_down
+        expr: up == 0
+        labels:
+          service: Platform
+          severity: major
+          correlate: service_up,service_down
+        annotations:
+          description: Service {{ $labels.instance }} is unavailable.
+          value: DOWN ({{ $value }})
+          runbook: http://wiki.alerta.io/RunBook/{app}/Event/{alertname}
+
+      - alert: service_up
+        expr: up == 1
+        labels:
+          service: Platform
+          severity: normal
+          correlate: service_up,service_down
+        annotations:
+          description: Service {{ $labels.instance }} is available.
+          value: UP ({{ $value }})
+
+      # system load alert
+      - alert: high_load
+        expr: node_load1 > 0.5
+        annotations:
+          description: '{{ $labels.instance }} of job {{ $labels.job }} is under high load.'
+          summary: Instance {{ $labels.instance }} under high load
+          value: '{{ $value }}'
+
+      # disk space alert (with resource=<instance>:<mountpoint> event=disk_space
+      - alert: disk_space
+        expr: (node_filesystem_size_bytes - node_filesystem_free_bytes) * 100 / node_filesystem_size_bytes > 5
+        labels:
+          instance: '{{ $labels.instance }}:{{ $labels.mountpoint }}'
+        annotations:
+          value: '{{ humanize $value }}%'
+
+      # disk space alert (with resource=<instance> event=disk_util:<mountpoint>
+      - alert: disk_util
+        expr: (node_filesystem_size_bytes - node_filesystem_free_bytes) * 100 / node_filesystem_size_bytes > 5
+        labels:
+          instance: '{{ $labels.instance }}'
+          event: '{alertname}:{{ $labels.mountpoint }}'  # python templating rendered by Alerta
+        annotations:
+          value: '{{ humanize $value }}%'
+
+      # API request rate alert
+      - alert: api_requests_high
+        expr: rate(alerta_alerts_queries_count{instance="alerta:8080",job="alerta"}[5m]) > 5
+        labels:
+          service: Alerta,Platform
+          severity: major
+        annotations:
+          description: API request rate of {{ $value | printf "%.1f" }} req/s is high (threshold 5 req/s)
+          summary: API request rate high
+          value: '{{ humanize $value }} req/s'
+  alerts: |
+    {}
+  prometheus.yml: |
+    global:
+      evaluation_interval: 1m
+      scrape_interval: 1m
+      scrape_timeout: 10s
+    rule_files:
+      - /etc/config/recording_rules.yml
+      - /etc/config/alerting_rules.yml
+      - /etc/config/alerting_rules_kubeapiserver.yml
+    scrape_configs:
+    - job_name: prometheus
+      static_configs:
+      - targets:
+        - localhost:9090
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+    - job_name: 'kube-state-metrics'
+      static_configs:
+      - targets: ['prometheus-kube-state-metrics.tanzu-system-monitoring.svc.cluster.local:8080']
+
+    - job_name: 'node-exporter'
+      static_configs:
+      - targets: ['prometheus-node-exporter.tanzu-system-monitoring.svc.cluster.local:9100']
+
+    - job_name: kubernetes-apiservers
+      kubernetes_sd_configs:
+      - role: endpoints
+      relabel_configs:
+      - action: keep
+        regex: default;kubernetes;https
+        source_labels:
+        - __meta_kubernetes_namespace
+        - __meta_kubernetes_service_name
+        - __meta_kubernetes_endpoint_port_name
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecure_skip_verify: true
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+    - job_name: kubernetes-nodes
+      kubernetes_sd_configs:
+      - role: node
+      relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - replacement: kubernetes.default.svc:443
+        target_label: __address__
+      - regex: (.+)
+        replacement: /api/v1/nodes/$1/proxy/metrics
+        source_labels:
+        - __meta_kubernetes_node_name
+        target_label: __metrics_path__
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecure_skip_verify: true
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+    - job_name: kubernetes-nodes-cadvisor
+      kubernetes_sd_configs:
+      - role: node
+      relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - replacement: kubernetes.default.svc:443
+        target_label: __address__
+      - regex: (.+)
+        replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+        source_labels:
+        - __meta_kubernetes_node_name
+        target_label: __metrics_path__
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        insecure_skip_verify: true
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+    - job_name: kubernetes-service-endpoints
+      kubernetes_sd_configs:
+      - role: endpoints
+      relabel_configs:
+      - action: keep
+        regex: true
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_scrape
+      - action: replace
+        regex: (https?)
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_scheme
+        target_label: __scheme__
+      - action: replace
+        regex: (.+)
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_path
+        target_label: __metrics_path__
+      - action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        source_labels:
+        - __address__
+        - __meta_kubernetes_service_annotation_prometheus_io_port
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_namespace
+        target_label: kubernetes_namespace
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_service_name
+        target_label: kubernetes_name
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_pod_node_name
+        target_label: kubernetes_node
+
+    - job_name: prometheus-pushgateway
+      kubernetes_sd_configs:
+      - role: service
+      relabel_configs:
+      - action: keep
+        regex: pushgateway
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_probe
+
+    - job_name: kubernetes-services
+      kubernetes_sd_configs:
+      - role: service
+      metrics_path: /probe
+      params:
+        module:
+        - http_2xx
+      relabel_configs:
+      - action: keep
+        regex: true
+        source_labels:
+        - __meta_kubernetes_service_annotation_prometheus_io_probe
+      - source_labels:
+        - __address__
+        target_label: __param_target
+      - replacement: blackbox
+        target_label: __address__
+      - source_labels:
+        - __param_target
+        target_label: instance
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - source_labels:
+        - __meta_kubernetes_namespace
+        target_label: kubernetes_namespace
+      - source_labels:
+        - __meta_kubernetes_service_name
+        target_label: kubernetes_name
+
+    - job_name: kubernetes-pods
+      kubernetes_sd_configs:
+      - role: pod
+      relabel_configs:
+      - action: keep
+        regex: true
+        source_labels:
+        - __meta_kubernetes_pod_annotation_prometheus_io_scrape
+      - action: replace
+        regex: (.+)
+        source_labels:
+        - __meta_kubernetes_pod_annotation_prometheus_io_path
+        target_label: __metrics_path__
+      - action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        source_labels:
+        - __address__
+        - __meta_kubernetes_pod_annotation_prometheus_io_port
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_namespace
+        target_label: kubernetes_namespace
+      - action: replace
+        source_labels:
+        - __meta_kubernetes_pod_name
+        target_label: kubernetes_pod_name
+
+    alerting:
+      alertmanagers:
+      - scheme: http
+        static_configs:
+        - targets:
+          - "prometheus-alertmanager.tanzu-system-monitoring.svc:80"
+      - kubernetes_sd_configs:
+          - role: pod
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_namespace]
+          regex: default
+          action: keep
+        - source_labels: [__meta_kubernetes_pod_label_app]
+          regex: prometheus
+          action: keep
+        - source_labels: [__meta_kubernetes_pod_label_component]
+          regex: alertmanager
+          action: keep
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_probe]
+          regex: .*
+          action: keep
+        - source_labels: [__meta_kubernetes_pod_container_port_number]
+          regex:
+          action: drop
+  recording_rules.yml: |
+    groups:
+    - name: prometheus-server-recording-rules
+      interval: 5s
+      rules:
+      - record: instance_path:request_failures:rate5m
+        expr: rate(request_failures_total{job="myjob"}[5m])
+
+      - record: instance_path:request_failures_per_requests:ratio_rate5m
+        expr: |2
+            instance_path:request_failures:rate5m{job="myjob"}
+          /
+            instance_path:requests:rate5m{job="myjob"}
+
+      # Aggregate up numerator and denominator, then divide to get path-level ratio.
+      - record: path:request_failures_per_requests:ratio_rate5m
+        expr: |2
+            sum without (instance)(instance_path:request_failures:rate5m{job="myjob"})
+          /
+            sum without (instance)(instance_path:requests:rate5m{job="myjob"})
+
+      # No labels left from instrumentation or distinguishing instances,
+      # so we use 'job' as the level.
+      - record: job:request_failures_per_requests:ratio_rate5m
+        expr: |2
+            sum without (instance, path)(instance_path:request_failures:rate5m{job="myjob"})
+          /
+            sum without (instance, path)(instance_path:requests:rate5m{job="myjob"})
+    - name: kube-apiserver.rules
+      interval: 3m
+      rules:
+      - expr: |2
+          (
+            (
+              sum(rate(apiserver_request_duration_seconds_count{job="kubernetes-apiservers",verb=~"LIST|GET"}[1d]))
+              -
+              (
+                (
+                  sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope=~"resource|",le="0.1"}[1d]))
+                  or
+                  vector(0)
+                )
+                +
+                sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope="namespace",le="0.5"}[1d]))
+                +
+                sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope="cluster",le="5"}[1d]))
+              )
+            )
+            +
+            # errors
+            sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"LIST|GET",code=~"5.."}[1d]))
+          )
+          /
+          sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"LIST|GET"}[1d]))
+        labels:
+          verb: read
+        record: apiserver_request:burnrate1d
+      - expr: |2
+          (
+            (
+              # too slow
+              sum(rate(apiserver_request_duration_seconds_count{job="kubernetes-apiservers",verb=~"LIST|GET"}[1h]))
+              -
+              (
+                (
+                  sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope=~"resource|",le="0.1"}[1h]))
+                  or
+                  vector(0)
+                )
+                +
+                sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope="namespace",le="0.5"}[1h]))
+                +
+                sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope="cluster",le="5"}[1h]))
+              )
+            )
+            +
+            # errors
+            sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"LIST|GET",code=~"5.."}[1h]))
+          )
+          /
+          sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"LIST|GET"}[1h]))
+        labels:
+          verb: read
+        record: apiserver_request:burnrate1h
+      - expr: |2
+          (
+            (
+              # too slow
+              sum(rate(apiserver_request_duration_seconds_count{job="kubernetes-apiservers",verb=~"LIST|GET"}[2h]))
+              -
+              (
+                (
+                  sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope=~"resource|",le="0.1"}[2h]))
+                  or
+                  vector(0)
+                )
+                +
+                sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope="namespace",le="0.5"}[2h]))
+                +
+                sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope="cluster",le="5"}[2h]))
+              )
+            )
+            +
+            # errors
+            sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"LIST|GET",code=~"5.."}[2h]))
+          )
+          /
+          sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"LIST|GET"}[2h]))
+        labels:
+          verb: read
+        record: apiserver_request:burnrate2h
+      - expr: |2
+          (
+            (
+              # too slow
+              sum(rate(apiserver_request_duration_seconds_count{job="kubernetes-apiservers",verb=~"LIST|GET"}[30m]))
+              -
+              (
+                (
+                  sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope=~"resource|",le="0.1"}[30m]))
+                  or
+                  vector(0)
+                )
+                +
+                sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope="namespace",le="0.5"}[30m]))
+                +
+                sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope="cluster",le="5"}[30m]))
+              )
+            )
+            +
+            # errors
+            sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"LIST|GET",code=~"5.."}[30m]))
+          )
+          /
+          sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"LIST|GET"}[30m]))
+        labels:
+          verb: read
+        record: apiserver_request:burnrate30m
+      - expr: |2
+          (
+            (
+              # too slow
+              sum(rate(apiserver_request_duration_seconds_count{job="kubernetes-apiservers",verb=~"LIST|GET"}[3d]))
+              -
+              (
+                (
+                  sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope=~"resource|",le="0.1"}[3d]))
+                  or
+                  vector(0)
+                )
+                +
+                sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope="namespace",le="0.5"}[3d]))
+                +
+                sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope="cluster",le="5"}[3d]))
+              )
+            )
+            +
+            # errors
+            sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"LIST|GET",code=~"5.."}[3d]))
+          )
+          /
+          sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"LIST|GET"}[3d]))
+        labels:
+          verb: read
+        record: apiserver_request:burnrate3d
+      - expr: |2
+          (
+            (
+              # too slow
+              sum(rate(apiserver_request_duration_seconds_count{job="kubernetes-apiservers",verb=~"LIST|GET"}[5m]))
+              -
+              (
+                (
+                  sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope=~"resource|",le="0.1"}[5m]))
+                  or
+                  vector(0)
+                )
+                +
+                sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope="namespace",le="0.5"}[5m]))
+                +
+                sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope="cluster",le="5"}[5m]))
+              )
+            )
+            +
+            # errors
+            sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"LIST|GET",code=~"5.."}[5m]))
+          )
+          /
+          sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"LIST|GET"}[5m]))
+        labels:
+          verb: read
+        record: apiserver_request:burnrate5m
+      - expr: |2
+          (
+            (
+              # too slow
+              sum(rate(apiserver_request_duration_seconds_count{job="kubernetes-apiservers",verb=~"LIST|GET"}[6h]))
+              -
+              (
+                (
+                  sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope=~"resource|",le="0.1"}[6h]))
+                  or
+                  vector(0)
+                )
+                +
+                sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope="namespace",le="0.5"}[6h]))
+                +
+                sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope="cluster",le="5"}[6h]))
+              )
+            )
+            +
+            # errors
+            sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"LIST|GET",code=~"5.."}[6h]))
+          )
+          /
+          sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"LIST|GET"}[6h]))
+        labels:
+          verb: read
+        record: apiserver_request:burnrate6h
+      - expr: |2
+          (
+            (
+              # too slow
+              sum(rate(apiserver_request_duration_seconds_count{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE"}[1d]))
+              -
+              sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE",le="1"}[1d]))
+            )
+            +
+            sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE",code=~"5.."}[1d]))
+          )
+          /
+          sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE"}[1d]))
+        labels:
+          verb: write
+        record: apiserver_request:burnrate1d
+      - expr: |2
+          (
+            (
+              # too slow
+              sum(rate(apiserver_request_duration_seconds_count{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE"}[1h]))
+              -
+              sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE",le="1"}[1h]))
+            )
+            +
+            sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE",code=~"5.."}[1h]))
+          )
+          /
+          sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE"}[1h]))
+        labels:
+          verb: write
+        record: apiserver_request:burnrate1h
+      - expr: |2
+          (
+            (
+              # too slow
+              sum(rate(apiserver_request_duration_seconds_count{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE"}[2h]))
+              -
+              sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE",le="1"}[2h]))
+            )
+            +
+            sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE",code=~"5.."}[2h]))
+          )
+          /
+          sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE"}[2h]))
+        labels:
+          verb: write
+        record: apiserver_request:burnrate2h
+      - expr: |2
+          (
+            (
+              # too slow
+              sum(rate(apiserver_request_duration_seconds_count{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE"}[30m]))
+              -
+              sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE",le="1"}[30m]))
+            )
+            +
+            sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE",code=~"5.."}[30m]))
+          )
+          /
+          sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE"}[30m]))
+        labels:
+          verb: write
+        record: apiserver_request:burnrate30m
+      - expr: |2
+          (
+            (
+              # too slow
+              sum(rate(apiserver_request_duration_seconds_count{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE"}[3d]))
+              -
+              sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE",le="1"}[3d]))
+            )
+            +
+            sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE",code=~"5.."}[3d]))
+          )
+          /
+          sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE"}[3d]))
+        labels:
+          verb: write
+        record: apiserver_request:burnrate3d
+      - expr: |2
+          (
+            (
+              # too slow
+              sum(rate(apiserver_request_duration_seconds_count{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE"}[5m]))
+              -
+              sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE",le="1"}[5m]))
+            )
+            +
+            sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE",code=~"5.."}[5m]))
+          )
+          /
+          sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE"}[5m]))
+        labels:
+          verb: write
+        record: apiserver_request:burnrate5m
+      - expr: |2
+          (
+            (
+              # too slow
+              sum(rate(apiserver_request_duration_seconds_count{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE"}[6h]))
+              -
+              sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE",le="1"}[6h]))
+            )
+            +
+            sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE",code=~"5.."}[6h]))
+          )
+          /
+          sum(rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE"}[6h]))
+        labels:
+          verb: write
+        record: apiserver_request:burnrate6h
+      - expr: |
+          sum by (code,resource) (rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"LIST|GET"}[5m]))
+        labels:
+          verb: read
+        record: code_resource:apiserver_request_total:rate5m
+      - expr: |
+          sum by (code,resource) (rate(apiserver_request_total{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE"}[5m]))
+        labels:
+          verb: write
+        record: code_resource:apiserver_request_total:rate5m
+      - expr: |
+          histogram_quantile(0.99, sum by (le, resource) (rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET"}[5m]))) > 0
+        labels:
+          quantile: "0.99"
+          verb: read
+        record: cluster_quantile:apiserver_request_duration_seconds:histogram_quantile
+      - expr: |
+          histogram_quantile(0.99, sum by (le, resource) (rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"POST|PUT|PATCH|DELETE"}[5m]))) > 0
+        labels:
+          quantile: "0.99"
+          verb: write
+        record: cluster_quantile:apiserver_request_duration_seconds:histogram_quantile
+      - expr: |2
+          sum(rate(apiserver_request_duration_seconds_sum{subresource!="log",verb!~"LIST|WATCH|WATCHLIST|DELETECOLLECTION|PROXY|CONNECT"}[5m])) without(instance, pod)
+          /
+          sum(rate(apiserver_request_duration_seconds_count{subresource!="log",verb!~"LIST|WATCH|WATCHLIST|DELETECOLLECTION|PROXY|CONNECT"}[5m])) without(instance, pod)
+        record: cluster:apiserver_request_duration_seconds:mean5m
+      - expr: |
+          histogram_quantile(0.99, sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",subresource!="log",verb!~"LIST|WATCH|WATCHLIST|DELETECOLLECTION|PROXY|CONNECT"}[5m])) without(instance, pod))
+        labels:
+          quantile: "0.99"
+        record: cluster_quantile:apiserver_request_duration_seconds:histogram_quantile
+      - expr: |
+          histogram_quantile(0.9, sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",subresource!="log",verb!~"LIST|WATCH|WATCHLIST|DELETECOLLECTION|PROXY|CONNECT"}[5m])) without(instance, pod))
+        labels:
+          quantile: "0.9"
+        record: cluster_quantile:apiserver_request_duration_seconds:histogram_quantile
+      - expr: |
+          histogram_quantile(0.5, sum(rate(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",subresource!="log",verb!~"LIST|WATCH|WATCHLIST|DELETECOLLECTION|PROXY|CONNECT"}[5m])) without(instance, pod))
+        labels:
+          quantile: "0.5"
+        record: cluster_quantile:apiserver_request_duration_seconds:histogram_quantile
+    - interval: 3m
+      name: kube-apiserver-availability.rules
+      rules:
+      - expr: |2
+          1 - (
+            (
+              # write too slow
+              sum(increase(apiserver_request_duration_seconds_count{verb=~"POST|PUT|PATCH|DELETE"}[30d]))
+              -
+              sum(increase(apiserver_request_duration_seconds_bucket{verb=~"POST|PUT|PATCH|DELETE",le="1"}[30d]))
+            ) +
+            (
+              # read too slow
+              sum(increase(apiserver_request_duration_seconds_count{verb=~"LIST|GET"}[30d]))
+              -
+              (
+                (
+                  sum(increase(apiserver_request_duration_seconds_bucket{verb=~"LIST|GET",scope=~"resource|",le="0.1"}[30d]))
+                  or
+                  vector(0)
+                )
+                +
+                sum(increase(apiserver_request_duration_seconds_bucket{verb=~"LIST|GET",scope="namespace",le="0.5"}[30d]))
+                +
+                sum(increase(apiserver_request_duration_seconds_bucket{verb=~"LIST|GET",scope="cluster",le="5"}[30d]))
+              )
+            ) +
+            # errors
+            sum(code:apiserver_request_total:increase30d{code=~"5.."} or vector(0))
+          )
+          /
+          sum(code:apiserver_request_total:increase30d)
+        labels:
+          verb: all
+        record: apiserver_request:availability30d
+      - expr: |2
+          1 - (
+            sum(increase(apiserver_request_duration_seconds_count{job="kubernetes-apiservers",verb=~"LIST|GET"}[30d]))
+            -
+            (
+              # too slow
+              (
+                sum(increase(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope=~"resource|",le="0.1"}[30d]))
+                or
+                vector(0)
+              )
+              +
+              sum(increase(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope="namespace",le="0.5"}[30d]))
+              +
+              sum(increase(apiserver_request_duration_seconds_bucket{job="kubernetes-apiservers",verb=~"LIST|GET",scope="cluster",le="5"}[30d]))
+            )
+            +
+            # errors
+            sum(code:apiserver_request_total:increase30d{verb="read",code=~"5.."} or vector(0))
+          )
+          /
+          sum(code:apiserver_request_total:increase30d{verb="read"})
+        labels:
+          verb: read
+        record: apiserver_request:availability30d
+      - expr: |2
+          1 - (
+            (
+              # too slow
+              sum(increase(apiserver_request_duration_seconds_count{verb=~"POST|PUT|PATCH|DELETE"}[30d]))
+              -
+              sum(increase(apiserver_request_duration_seconds_bucket{verb=~"POST|PUT|PATCH|DELETE",le="1"}[30d]))
+            )
+            +
+            # errors
+            sum(code:apiserver_request_total:increase30d{verb="write",code=~"5.."} or vector(0))
+          )
+          /
+          sum(code:apiserver_request_total:increase30d{verb="write"})
+        labels:
+          verb: write
+        record: apiserver_request:availability30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="LIST",code=~"2.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="GET",code=~"2.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="POST",code=~"2.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="PUT",code=~"2.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="PATCH",code=~"2.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="DELETE",code=~"2.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="LIST",code=~"3.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="GET",code=~"3.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="POST",code=~"3.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="PUT",code=~"3.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="PATCH",code=~"3.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="DELETE",code=~"3.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="LIST",code=~"4.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="GET",code=~"4.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="POST",code=~"4.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="PUT",code=~"4.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="PATCH",code=~"4.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="DELETE",code=~"4.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="LIST",code=~"5.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="GET",code=~"5.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="POST",code=~"5.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="PUT",code=~"5.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="PATCH",code=~"5.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code, verb) (increase(apiserver_request_total{job="kubernetes-apiservers",verb="DELETE",code=~"5.."}[30d]))
+        record: code_verb:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code) (code_verb:apiserver_request_total:increase30d{verb=~"LIST|GET"})
+        labels:
+          verb: read
+        record: code:apiserver_request_total:increase30d
+      - expr: |
+          sum by (code) (code_verb:apiserver_request_total:increase30d{verb=~"POST|PUT|PATCH|DELETE"})
+        labels:
+          verb: write
+        record: code:apiserver_request_total:increase30d
+  rules: |
+    {}
+  alerting_rules_kubeapiserver.yml: |
+    groups:
+    - name: kube-apiserver-slos
+      rules:
+      - alert: KubeAPIErrorBudgetBurn
+        annotations:
+          message: The API server is burning too much error budget
+          runbook_url: https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeapierrorbudgetburn
+        expr: |2
+          sum(apiserver_request:burnrate1h) > (14.40 * 0.01000)
+          and
+          sum(apiserver_request:burnrate5m) > (14.40 * 0.01000)
+        for: 2m
+        labels:
+          long: 1h
+          severity: critical
+          short: 5m
+      - alert: KubeAPIErrorBudgetBurn
+        annotations:
+          message: The API server is burning too much error budget
+          runbook_url: https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeapierrorbudgetburn
+        expr: |2
+          sum(apiserver_request:burnrate6h) > (6.00 * 0.01000)
+          and
+          sum(apiserver_request:burnrate30m) > (6.00 * 0.01000)
+        for: 15m
+        labels:
+          long: 6h
+          severity: critical
+          short: 30m
+      - alert: KubeAPIErrorBudgetBurn
+        annotations:
+          message: The API server is burning too much error budget
+          runbook_url: https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeapierrorbudgetburn
+        expr: |2
+          sum(apiserver_request:burnrate1d) > (3.00 * 0.01000)
+          and
+          sum(apiserver_request:burnrate2h) > (3.00 * 0.01000)
+        for: 1h
+        labels:
+          long: 1d
+          severity: warning
+          short: 2h
+      - alert: KubeAPIErrorBudgetBurn
+        annotations:
+          message: The API server is burning too much error budget
+          runbook_url: https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeapierrorbudgetburn
+        expr: |2
+          sum(apiserver_request:burnrate3d) > (1.00 * 0.01000)
+          and
+          sum(apiserver_request:burnrate6h) > (1.00 * 0.01000)
+        for: 3h
+        labels:
+          long: 3d
+          severity: warning
+          short: 6h
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    component: server
+    app: prometheus
+  name: prometheus-server
+  namespace: tanzu-system-monitoring
+spec:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 9090
+  selector:
+    component: server
+    app: prometheus
+  sessionAffinity: None
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    component: server
+    app: prometheus
+  name: prometheus-server
+  namespace: tanzu-system-monitoring
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 8Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    component: server
+    app: prometheus
+  name: prometheus-server
+  namespace: tanzu-system-monitoring
+spec:
+  selector:
+    matchLabels:
+      component: server
+      app: prometheus
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        component: server
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus-server
+      containers:
+      - name: prometheus-server-configmap-reload
+        image: registry.tkg.vmware.run/prometheus/configmap-reload:v0.3.0_vmware.1
+        imagePullPolicy: IfNotPresent
+        args:
+        - --volume-dir=/etc/config
+        - --webhook-url=http://127.0.0.1:9090/-/reload
+        resources: {}
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/config
+          readOnly: true
+      - name: prometheus-server
+        image: registry.tkg.vmware.run/prometheus/prometheus:v2.18.1_vmware.1
+        imagePullPolicy: IfNotPresent
+        args:
+        - --storage.tsdb.retention.time=15d
+        - --config.file=/etc/config/prometheus.yml
+        - --storage.tsdb.path=/data
+        - --web.console.libraries=/etc/prometheus/console_libraries
+        - --web.console.templates=/etc/prometheus/consoles
+        - --web.enable-lifecycle
+        ports:
+        - containerPort: 9090
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9090
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+          failureThreshold: 3
+          successThreshold: 1
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: 9090
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+          failureThreshold: 3
+          successThreshold: 1
+        resources: {}
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/config
+        - name: storage-volume
+          mountPath: /data
+          subPath: ""
+      initContainers:
+      - name: prometheus-server-data-permission-fix
+        image: registry.tkg.vmware.run/prometheus/cadvisor:v0.36.0_vmware.1
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/chmod
+        - -R
+        - "777"
+        - /data
+        volumeMounts:
+        - name: storage-volume
+          mountPath: /data
+          subPath: ""
+      volumes:
+      - name: config-volume
+        configMap:
+          name: prometheus-server
+      - name: storage-volume
+        persistentVolumeClaim:
+          claimName: prometheus-server
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    component: alertmanager
+    app: prometheus
+  name: prometheus-alertmanager
+  namespace: tanzu-system-monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    component: alertmanager
+    app: prometheus
+  name: prometheus-alertmanager
+rules: []
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    component: alertmanager
+    app: prometheus
+  name: prometheus-alertmanager
+subjects:
+- kind: ServiceAccount
+  name: prometheus-alertmanager
+  namespace: tanzu-system-monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-alertmanager
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    component: alertmanager
+    app: prometheus
+  name: prometheus-alertmanager
+  namespace: tanzu-system-monitoring
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+    templates:
+    - /etc/alertmanager/templates/*.tmpl
+    route:
+      group_by:
+      - alertname
+      - cluster
+      - service
+      group_wait: 10s
+      repeat_interval: 15m
+      receiver: email-receiver
+      routes:
+      - receiver: slack_demo
+        match:
+          severity: slack
+        group_wait: 10s
+        repeat_interval: 1m
+    receivers:
+    - name: email-receiver
+      email_configs:
+      - to: cnd@etechsystem.co.kr
+        send_resolved: false
+        from: from-email@tanzu.com
+        smarthost: smtp.example.com:25
+        require_tls: false
+    - name: slack_demo
+      slack_configs: []
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    component: alertmanager
+    app: prometheus
+  name: prometheus-alertmanager
+  namespace: tanzu-system-monitoring
+spec:
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 9093
+  selector:
+    component: alertmanager
+    app: prometheus
+  sessionAffinity: None
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    component: alertmanager
+    app: prometheus
+  name: prometheus-alertmanager
+  namespace: tanzu-system-monitoring
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    component: alertmanager
+    app: prometheus
+  name: prometheus-alertmanager
+  namespace: tanzu-system-monitoring
+spec:
+  selector:
+    matchLabels:
+      component: alertmanager
+      app: prometheus
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        component: alertmanager
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus-alertmanager
+      containers:
+      - name: prometheus-alertmanager
+        image: registry.tkg.vmware.run/prometheus/alertmanager:v0.20.0_vmware.1
+        imagePullPolicy: IfNotPresent
+        args:
+        - --config.file=/etc/config/alertmanager.yml
+        - --storage.path=/data
+        - --cluster.listen-address=
+        ports:
+        - containerPort: 9093
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9093
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+        resources: {}
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/config
+        - name: storage-volume
+          mountPath: /data
+          subPath: ""
+      - name: prometheus-alertmanager-configmap-reload
+        image: registry.tkg.vmware.run/prometheus/configmap-reload:v0.3.0_vmware.1
+        imagePullPolicy: IfNotPresent
+        args:
+        - --volume-dir=/etc/config
+        - --webhook-url=http://127.0.0.1:9093/-/reload
+        resources: {}
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/config
+          readOnly: true
+      securityContext:
+        fsGroup: 65534
+        runAsGroup: 65534
+        runAsNonRoot: true
+        runAsUser: 65534
+      volumes:
+      - name: config-volume
+        configMap:
+          name: prometheus-alertmanager
+      - name: storage-volume
+        persistentVolumeClaim:
+          claimName: prometheus-alertmanager
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    component: kube-state-metrics
+    app: prometheus
+  name: prometheus-kube-state-metrics
+  namespace: tanzu-system-monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    component: kube-state-metrics
+    app: prometheus
+  name: prometheus-kube-state-metrics
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  - nodes
+  - persistentvolumeclaims
+  - pods
+  - services
+  - resourcequotas
+  - replicationcontrollers
+  - limitranges
+  - persistentvolumeclaims
+  - persistentvolumes
+  - endpoints
+  - secrets
+  - configmaps
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - extensions
+  resources:
+  - daemonsets
+  - deployments
+  - ingresses
+  - replicasets
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - daemonsets
+  - deployments
+  - statefulsets
+  - replicasets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - cronjobs
+  - jobs
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - autoscaling
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
+  - volumeattachments
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - certificates.k8s.io
+  resources:
+  - certificatesigningrequests
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingwebhookconfigurations
+  - mutatingwebhookconfigurations
+  verbs:
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    component: kube-state-metrics
+    app: prometheus
+  name: prometheus-kube-state-metrics
+subjects:
+- kind: ServiceAccount
+  name: prometheus-kube-state-metrics
+  namespace: tanzu-system-monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-kube-state-metrics
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    prometheus.io/scrape: "true"
+  labels:
+    component: kube-state-metrics
+    app: prometheus
+  name: prometheus-kube-state-metrics
+  namespace: tanzu-system-monitoring
+spec:
+  clusterIP: None
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 8080
+  - name: telemetry
+    port: 81
+    protocol: TCP
+    targetPort: 8081
+  selector:
+    component: kube-state-metrics
+    app: prometheus
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    component: kube-state-metrics
+    app: prometheus
+  name: prometheus-kube-state-metrics
+  namespace: tanzu-system-monitoring
+spec:
+  selector:
+    matchLabels:
+      component: kube-state-metrics
+      app: prometheus
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        component: kube-state-metrics
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus-kube-state-metrics
+      containers:
+      - name: prometheus-kube-state-metrics
+        image: registry.tkg.vmware.run/prometheus/kube-state-metrics:v1.9.5_vmware.1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: metrics
+          containerPort: 8080
+        - name: telemetry
+          containerPort: 8081
+        resources: {}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      nodeSelector:
+        kubernetes.io/os: linux
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    component: node-exporter
+    app: prometheus
+  name: prometheus-node-exporter
+  namespace: tanzu-system-monitoring
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    prometheus.io/scrape: "true"
+  labels:
+    component: node-exporter
+    app: prometheus
+  name: prometheus-node-exporter
+  namespace: tanzu-system-monitoring
+spec:
+  clusterIP: None
+  ports:
+  - name: metrics
+    port: 9100
+    protocol: TCP
+    targetPort: 9100
+  selector:
+    component: node-exporter
+    app: prometheus
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    component: node-exporter
+    app: prometheus
+  name: prometheus-node-exporter
+  namespace: tanzu-system-monitoring
+spec:
+  selector:
+    matchLabels:
+      component: node-exporter
+      app: prometheus
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        component: node-exporter
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus-node-exporter
+      containers:
+      - name: prometheus-node-exporter
+        image: registry.tkg.vmware.run/prometheus/prometheus_node_exporter:v0.18.1_vmware.1
+        imagePullPolicy: IfNotPresent
+        args:
+        - --path.procfs=/host/proc
+        - --path.sysfs=/host/sys
+        ports:
+        - name: metrics
+          containerPort: 9100
+          hostPort: 9100
+        resources: {}
+        volumeMounts:
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: sys
+          mountPath: /host/sys
+          readOnly: true
+      hostNetwork: false
+      hostPID: true
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: sys
+        hostPath:
+          path: /sys
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    component: pushgateway
+    app: prometheus
+  name: prometheus-pushgateway
+  namespace: tanzu-system-monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    component: pushgateway
+    app: prometheus
+  name: prometheus-pushgateway
+rules: []
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    component: pushgateway
+    app: prometheus
+  name: prometheus-pushgateway
+subjects:
+- kind: ServiceAccount
+  name: prometheus-pushgateway
+  namespace: tanzu-system-monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-pushgateway
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    prometheus.io/probe: pushgateway
+  labels:
+    component: pushgateway
+    app: prometheus
+  name: prometheus-pushgateway
+  namespace: tanzu-system-monitoring
+spec:
+  ports:
+  - name: http
+    port: 9091
+    protocol: TCP
+    targetPort: 9091
+  selector:
+    component: pushgateway
+    app: prometheus
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    component: pushgateway
+    app: prometheus
+  name: prometheus-pushgateway
+  namespace: tanzu-system-monitoring
+spec:
+  selector:
+    matchLabels:
+      component: pushgateway
+      app: prometheus
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        component: pushgateway
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus-pushgateway
+      containers:
+      - name: prometheus-pushgateway
+        image: registry.tkg.vmware.run/prometheus/pushgateway:v1.2.0_vmware.1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9091
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: 9091
+          initialDelaySeconds: 10
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9091
+          initialDelaySeconds: 10
+          timeoutSeconds: 10
+        resources: {}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    component: cadvisor
+    app: prometheus
+  name: prometheus-cadvisor
+  namespace: tanzu-system-monitoring
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels:
+    component: cadvisor
+    app: prometheus
+  name: prometheus-cadvisor
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - events
+  - namespaces
+  - nodes
+  - nodes/stats
+  - pods
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - extensions
+  resources:
+  - deployments
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - policy
+  resourceNames:
+  - cadvisor
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    component: cadvisor
+    app: prometheus
+  name: prometheus-cadvisor
+subjects:
+- kind: ServiceAccount
+  name: prometheus-cadvisor
+  namespace: tanzu-system-monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-cadvisor
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    component: cadvisor
+    app: prometheus
+  name: prometheus-cadvisor
+  namespace: tanzu-system-monitoring
+spec:
+  selector:
+    matchLabels:
+      component: cadvisor
+      app: prometheus
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        component: cadvisor
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus-cadvisor
+      containers:
+      - name: prometheus-cadvisor
+        image: registry.tkg.vmware.run/prometheus/cadvisor:v0.36.0_vmware.1
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: 200Mi
+            cpu: 150m
+          limits:
+            memory: 2000Mi
+            cpu: 300m
+        volumeMounts:
+        - name: rootfs
+          mountPath: /rootfs
+          readOnly: true
+        - name: var-run
+          mountPath: /var/run
+          readOnly: true
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+        - name: docker
+          mountPath: /var/lib/docker
+          readOnly: true
+        - name: disk
+          mountPath: /dev/disk
+          readOnly: true
+        ports:
+        - name: http
+          containerPort: 9092
+          protocol: TCP
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: rootfs
+        hostPath:
+          path: /
+      - name: var-run
+        hostPath:
+          path: /var/run
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: docker
+        hostPath:
+          path: /var/lib/docker
+      - name: disk
+        hostPath:
+          path: /dev/disk
