@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nfs-test
+  namespace: default
+  labels:
+    app: nfs-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nfs-test
+  template:
+    metadata:
+      labels:
+        app: nfs-test
+    spec:
+      containers:
+      - name: container
+        image: nginx
+        volumeMounts:
+        - name: nfs-dir
+          mountPath: /nfs
+      volumes:
+      - name: nfs-dir
+        nfs:
+          path: /nas-data
+          server: 172.19.1.212

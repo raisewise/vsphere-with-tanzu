@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nfs
+  name: nfs
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nfs
+  template:
+    metadata:
+      labels:
+        app: nfs
+    spec:
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: nfs-pvc
+      containers:
+      - image: nginx
+        name: container
+        volumeMounts:
+        - name: data
+          mountPath: /nfs
