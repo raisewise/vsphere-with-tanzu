@@ -1,0 +1,25 @@
+#@ load("/values.star", "values")
+#@ load("/globals.star", "get_resource_names_for_role")
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: external-dns
+rules:
+- apiGroups: [""]
+  resources: ["services","endpoints","pods"]
+  verbs: ["get","watch","list"]
+- apiGroups: ["extensions","networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["get","watch","list"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list","watch"]
+- apiGroups: ["projectcontour.io"]
+  resources: ["httpproxies"]
+  verbs: ["get","watch","list"]
+- apiGroups: ["policy"]
+  resources: ["podsecuritypolicies"]
+  verbs: ["use"]
+  resourceNames: #@ get_resource_names_for_role(values.externalDns.pspNames)

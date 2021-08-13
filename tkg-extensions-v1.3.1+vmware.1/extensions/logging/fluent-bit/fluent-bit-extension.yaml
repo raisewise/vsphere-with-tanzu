@@ -1,0 +1,27 @@
+# fluent-bit k14s objects managed by kapp-controller
+---
+apiVersion: kappctrl.k14s.io/v1alpha1
+kind: App
+metadata:
+  name: fluent-bit
+  namespace: tanzu-system-logging
+  annotations:
+    tmc.cloud.vmware.com/managed: "false"
+spec:
+  syncPeriod: 5m
+  serviceAccountName: fluent-bit-extension-sa
+  fetch:
+    - image:
+        url: projects.registry.vmware.com/tkg/tkg-extensions-templates:v1.3.1_vmware.1
+  template:
+    - ytt:
+        paths:
+          - tkg-extensions/common
+          - tkg-extensions/logging/fluent-bit
+        inline:
+          pathsFrom:
+            - secretRef:
+                name: fluent-bit-data-values
+  deploy:
+    - kapp:
+        rawOptions: ["--wait-timeout=5m"]

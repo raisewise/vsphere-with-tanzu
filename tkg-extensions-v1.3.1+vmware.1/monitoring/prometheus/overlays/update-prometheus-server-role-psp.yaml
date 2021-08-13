@@ -1,0 +1,11 @@
+#@ load("/values.star", "values")
+#@ load("@ytt:overlay", "overlay")
+#@ load("/globals.star", "get_resource_names_for_role")
+
+#@overlay/match by=overlay.subset({"kind": "ClusterRole", "metadata": {"name": "prometheus-server"}})
+---
+rules:
+ #@overlay/match by=lambda i, l, r: l["verbs"][0] == "use"
+  -
+   #@overlay/match missing_ok=True
+   resourceNames: #@ get_resource_names_for_role(values.monitoring.pspNames)

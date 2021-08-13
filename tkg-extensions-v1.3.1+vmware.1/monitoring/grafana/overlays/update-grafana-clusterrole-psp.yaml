@@ -1,0 +1,15 @@
+#@ load("/values.star", "values")
+#@ load("@ytt:overlay", "overlay")
+#@ load("/globals.star", "get_resource_names_for_role")
+
+#@overlay/match by=overlay.subset({"kind": "ClusterRole", "metadata": {"name": "grafana-clusterrole"}})
+---
+rules:
+ #@overlay/match by=overlay.all
+  -
+   #@overlay/match missing_ok=True
+   resourceNames: #@ get_resource_names_for_role(values.monitoring.pspNames)
+  #@overlay/append
+  - apiGroups: #@ values.monitoring.grafana.cluster_role.apiGroups
+    resources: #@ values.monitoring.grafana.cluster_role.resources
+    verbs: #@ values.monitoring.grafana.cluster_role.verbs

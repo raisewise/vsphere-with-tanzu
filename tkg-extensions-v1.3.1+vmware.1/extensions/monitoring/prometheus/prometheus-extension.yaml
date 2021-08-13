@@ -1,0 +1,28 @@
+# prometheus k14s objects managed by kapp-controller
+---
+apiVersion: kappctrl.k14s.io/v1alpha1
+kind: App
+metadata:
+  name: prometheus
+  namespace: tanzu-system-monitoring
+  annotations:
+    tmc.cloud.vmware.com/managed: "false"
+spec:
+  syncPeriod: 5m
+  serviceAccountName: prometheus-extension-sa
+  fetch:
+    - image:
+        url: projects.registry.vmware.com/tkg/tkg-extensions-templates:v1.3.1_vmware.1
+  template:
+    - ytt:
+        ignoreUnknownComments: true
+        paths:
+          - tkg-extensions/common
+          - tkg-extensions/monitoring/prometheus
+        inline:
+          pathsFrom:
+            - secretRef:
+                name: prometheus-data-values
+  deploy:
+    - kapp:
+        rawOptions: ["--wait-timeout=5m"]

@@ -1,0 +1,15 @@
+#@ load("/values.star", "values")
+#@ load("@ytt:overlay", "overlay")
+#@ load("/globals.star", "get_resource_names_for_role")
+
+#@overlay/match by=overlay.subset({"kind": "ClusterRole", "metadata": {"name": "contour"}})
+---
+rules:
+  #@overlay/append
+- apiGroups:
+  - policy
+  resources:
+  - podsecuritypolicies
+  verbs:
+  - use
+  resourceNames: #@ get_resource_names_for_role(values.contour.pspNames)

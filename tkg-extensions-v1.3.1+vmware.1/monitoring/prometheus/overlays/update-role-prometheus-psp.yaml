@@ -1,0 +1,11 @@
+#@ load("/values.star", "values")
+#@ load("@ytt:overlay", "overlay")
+#@ load("/globals.star", "get_resource_names_for_role")
+
+#@overlay/match by=overlay.or_op(overlay.subset({"kind": "ClusterRole", "metadata": {"name": "prometheus-alertmanager"}}),overlay.subset({"kind": "ClusterRole", "metadata": {"name": "prometheus-kube-state-metrics"}}),overlay.subset({"kind": "ClusterRole", "metadata": {"name": "prometheus-node-exporter"}}),overlay.subset({"kind": "ClusterRole", "metadata": {"name": "prometheus-pushgateway"}}),overlay.subset({"kind": "ClusterRole", "metadata": {"name": "prometheus-cadvisor"}})),expects="5+"
+---
+rules:
+ #@overlay/match by=lambda i, l, r: l["resources"][0] == "podsecuritypolicies"
+  -
+   #@overlay/match missing_ok=True
+   resourceNames: #@ get_resource_names_for_role(values.monitoring.pspNames)
