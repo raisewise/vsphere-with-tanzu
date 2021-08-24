@@ -14,39 +14,22 @@ spec:
     tls:
       secretName: cnd-tls/wild-tls
   routes:
-  - services:
-    - name: prometheus-alertmanager
-      port: 80
-    conditions:
-    - prefix: /pro/alt
-    pathRewritePolicy:
-      replacePrefix:
-      - prefix: /pro/alt
-        replacement: /
-  - services:
-    - name: prometheus-node-exporter
-      port: 9100
-    conditions:
-    - prefix: /pro/exp
-    pathRewritePolicy:
-      replacePrefix:
-      - prefix: /pro/exp
-        replacement: /
-  - services:
-    - name: prometheus-server
-      port: 80
-    conditions:
-    - prefix: /pro
-    pathRewritePolicy:
-      replacePrefix:
-      - prefix: /pro
-        replacement: /graph
-  - services:
-    - name: prometheus-pushgateway
-      port: 9091
-    conditions:
-    - prefix: /pro/pg
-    pathRewritePolicy:
-      replacePrefix:
-      - prefix: /pro/pg
-        replacement: /
+    - conditions:
+      - prefix: "/"
+      pathRewritePolicy:
+        replacePrefix:
+          - prefix: "/"
+            replacement: /
+      services:
+        - name: prometheus-server
+          port: 80
+    - conditions:
+      - prefix: "/alertmanager/"
+      pathRewritePolicy:
+        replacePrefix:
+        - prefix: "/alertmanager/"
+          replacement: /
+      services:
+        - name: prometheus-alertmanager
+          port: 80
+

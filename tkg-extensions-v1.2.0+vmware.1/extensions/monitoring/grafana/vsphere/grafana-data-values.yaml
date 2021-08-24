@@ -57,7 +57,7 @@ monitoring:
     secret:
       type: "Opaque"
       admin_user: "YWRtaW4="
-      admin_password: "Vk13YXJlMSEK"
+      admin_password: "Vk13YXJlMSE="
       ldap_toml: ""
     deployment:
       replicas: 1
