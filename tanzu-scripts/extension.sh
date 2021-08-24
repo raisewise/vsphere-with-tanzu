@@ -61,4 +61,3 @@ kubectl apply -f $EXTENSIONS/monitoring/grafana/grafana-httpproxy.yaml
 #     $ kgns
 #     $ kubectl config set-context --current --namespace vmware-system-tmc
 #     $ kcn vmware-system-tmc
-# add
