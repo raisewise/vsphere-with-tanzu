@@ -9,6 +9,7 @@
 EXTENSIONS=$HOME/Documents/vsphere-with-tanzu/tkg-extensions-v1.2.0+vmware.1/extensions
 
 kubectl apply -f $EXTENSIONS/../../certificate-contour/wild-tls.yaml
+kubectl apply -f $EXTENSIONS/../../certificate-contour/delegation.yaml
 
 kubectl create clusterrolebinding default-tkg-admin-privileged-binding --clusterrole=psp:vmware-system-privileged --group=system:authenticated
 
@@ -45,7 +46,7 @@ kubectl apply -f $EXTENSIONS/monitoring/prometheus/prometheus-httpproxy.yaml
 kubectl apply -f $EXTENSIONS/monitoring/grafana/namespace-role.yaml
 kubectl create secret generic grafana-data-values --from-file=values.yaml=$EXTENSIONS/monitoring/grafana/vsphere/grafana-data-values.yaml -n tanzu-system-monitoring
 # edit secret
-# kubectl create secret generic grafana-data-values --from-file=values.yaml=$EXTENSIONS/monitoring/grafana/vsphere/prometheus-data-values.yaml -n tanzu-system-monitoring -o yaml --dry-run=client | kubectl replace -f -
+# kubectl create secret generic grafana-data-values --from-file=values.yaml=$EXTENSIONS/monitoring/grafana/vsphere/grafana-data-values.yaml -n tanzu-system-monitoring -o yaml --dry-run=client | kubectl replace -f -
 kubectl apply -f $EXTENSIONS/monitoring/grafana/grafana-extension.yaml
 kubectl apply -f $EXTENSIONS/monitoring/grafana/grafana-httpproxy.yaml
 

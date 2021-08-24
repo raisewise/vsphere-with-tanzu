@@ -1,0 +1,13 @@
+apiVersion: projectcontour.io/v1
+kind: TLSCertificateDelegation
+metadata:
+  name: wildcards
+  namespace: cnd-tls
+  Labels:
+    name: wildcards
+spec:
+  delegations:
+  - secretName: wild-tls
+    targetNamespaces: ["*"] 
+  - secretName: wild-tls
+    targetNamespaces: ["tanzu-system-monitoring"] 
