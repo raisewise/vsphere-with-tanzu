@@ -1,0 +1,25 @@
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  annotation:
+    projectcontour.io/tls-minimum-protocol-version: "TLSv1_3"
+    ingress.kubernetes.io/force-ssl-redirect: "false"
+    ingress.kubernetes.io/rewrite-target: "/login"
+    kubernetes.io/ingress.class: "contour"
+  name: grafana
+  namespace: tanzu-system-monitoring
+spec:
+  virtualhost:
+    fqdn: gra.cnd.lab
+    tls:
+      secretName: cnd-tls/wild-tls
+  routes:
+  - services:
+    - name: grafana
+      port: 80
+    conditions:
+    - prefix: /
+      # pathRewritePolicy:
+      # replacePrefix:
+      #- prefix: /login
+      #  replacement: /

@@ -33,6 +33,25 @@ spec:
               - tkg-extensions/common
               - tkg-extensions/logging/fluent-bit
             inline:
+              paths:
+                update-config-map.yaml: |
+                  #@ load("@ytt:overlay", "overlay")
+                  #@overlay/match by=overlay.subset({"kind": "ConfigMap", "metadata": {"name": "fluent-bit-config"}})
+                  ---
+                  data:
+                    output-elasticsearch.conf: |
+                      [OUTPUT]
+                          Name syslog
+                          Match *
+                          Host 172.19.16.150
+                          Port 514
+                          Mode tcp
+                          Syslog_Format rfc5424
+                          Syslog_Hostname_key tkg_cluster
+                          Syslog_Appname_key pod_name
+                          Syslog_Procid_key container_name
+                          Syslog_Message_key message
+                          Syslog_sd_key dockerid=docker_id
               pathsFrom:
                 - secretRef:
                     name: fluent-bit-data-values

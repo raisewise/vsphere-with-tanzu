@@ -8,6 +8,8 @@
 
 EXTENSIONS=$HOME/Documents/vsphere-with-tanzu/tkg-extensions-v1.2.0+vmware.1/extensions
 
+kubectl apply -f $EXTENSIONS/../../certificate-contour/wild-tls.yaml
+
 kubectl create clusterrolebinding default-tkg-admin-privileged-binding --clusterrole=psp:vmware-system-privileged --group=system:authenticated
 
 kubectl apply -f $EXTENSIONS/tmc-extension-manager.yaml
@@ -22,6 +24,30 @@ kubectl create secret generic contour-data-values --from-file=values.yaml=$EXTEN
 # edit secret
 # kubectl create secret generic contour-data-values --from-file=values.yaml=$EXTENSIONS/ingress/contour/vsphere/contour-data-values.yaml -n tanzu-system-ingress -o yaml --dry-run=client | kubectl replace -f -
 kubectl apply -f  ingress/contour/contour-extension.yaml
+
+# fluent-bit
+kubectl apply -f $EXTENSIONS/logging/fluent-bit/namespace-role.yaml
+kubectl create secret generic fluent-bit-data-values --from-file=values.yaml=$EXTENSIONS/logging/fluent-bit/elasticsearch/fluent-bit-data-values.yaml -n tanzu-system-logging
+# edit secret
+# kubectl create secret generic fluent-bit-data-values --from-file=values.yaml=$EXTENSIONS/logging/fluent-bit/elasticsearch/fluent-bit-data-values.yaml -n tanzu-system-logging -o yaml --dry-run=client | kubectl replace -f -
+kubectl apply -f $EXTENSIONS/logging/fluent-bit/fluent-bit-extension.yaml
+# kubectl logs -n tanzu-system-logging <fluent pod> -c fluent-bit
+
+# prometheus
+kubectl apply -f $EXTENSIONS/monitoring/prometheus/namespace-role.yaml
+kubectl create secret generic prometheus-data-values --from-file=values.yaml=$EXTENSIONS/monitoring/prometheus/vsphere/prometheus-data-values.yaml -n tanzu-system-monitoring
+# edit secret
+# kubectl create secret generic prometheus-data-values --from-file=values.yaml=$EXTENSIONS/monitoring/prometheus/vsphere/prometheus-data-values.yaml -n tanzu-system-monitoring -o yaml --dry-run=client | kubectl replace -f -
+kubectl apply -f $EXTENSIONS/monitoring/prometheus/prometheus-extension.yaml
+kubectl apply -f $EXTENSIONS/monitoring/prometheus/prometheus-httpproxy.yaml
+
+# grafana
+kubectl apply -f $EXTENSIONS/monitoring/grafana/namespace-role.yaml
+kubectl create secret generic grafana-data-values --from-file=values.yaml=$EXTENSIONS/monitoring/grafana/vsphere/grafana-data-values.yaml -n tanzu-system-monitoring
+# edit secret
+# kubectl create secret generic grafana-data-values --from-file=values.yaml=$EXTENSIONS/monitoring/grafana/vsphere/prometheus-data-values.yaml -n tanzu-system-monitoring -o yaml --dry-run=client | kubectl replace -f -
+kubectl apply -f $EXTENSIONS/monitoring/grafana/grafana-extension.yaml
+kubectl apply -f $EXTENSIONS/monitoring/grafana/grafana-httpproxy.yaml
 
 # ! 참고 (alias 포함)
 # @ contexts 변경

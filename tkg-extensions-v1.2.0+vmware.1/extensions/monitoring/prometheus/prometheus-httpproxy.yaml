@@ -1,17 +1,52 @@
 apiVersion: projectcontour.io/v1
 kind: HTTPProxy
 metadata:
-  name: prometheus
+  annotation:
+    projectcontour.io/tls-minimum-protocol-version: "TLSv1_3"
+    ingress.kubernetes.io/force-ssl-redirect: "false"
+    ingress.kubernetes.io/rewrite-target: "/"
+    kubernetes.io/ingress.class: "contour"
+  name: monitoring-httpproxy
   namespace: tanzu-system-monitoring
 spec:
   virtualhost:
     fqdn: pro.cnd.lab
-    # tls:
-    #   secretName: cnd-tls/wild-tls
+    tls:
+      secretName: cnd-tls/wild-tls
   routes:
-    - conditions:
-      - prefix: /
-      services:
-        - name: prometheus-server
-          port: 80
-
+  - services:
+    - name: prometheus-alertmanager
+      port: 80
+    conditions:
+    - prefix: /pro/alt
+    pathRewritePolicy:
+      replacePrefix:
+      - prefix: /pro/alt
+        replacement: /
+  - services:
+    - name: prometheus-node-exporter
+      port: 9100
+    conditions:
+    - prefix: /pro/exp
+    pathRewritePolicy:
+      replacePrefix:
+      - prefix: /pro/exp
+        replacement: /
+  - services:
+    - name: prometheus-server
+      port: 80
+    conditions:
+    - prefix: /pro
+    pathRewritePolicy:
+      replacePrefix:
+      - prefix: /pro
+        replacement: /graph
+  - services:
+    - name: prometheus-pushgateway
+      port: 9091
+    conditions:
+    - prefix: /pro/pg
+    pathRewritePolicy:
+      replacePrefix:
+      - prefix: /pro/pg
+        replacement: /
