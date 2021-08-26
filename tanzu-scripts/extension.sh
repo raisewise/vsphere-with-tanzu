@@ -24,7 +24,7 @@ kubectl apply -f $EXTENSIONS/ingress/contour/namespace-role.yaml
 kubectl create secret generic contour-data-values --from-file=values.yaml=$EXTENSIONS/ingress/contour/vsphere/contour-data-values.yaml -n tanzu-system-ingress
 # edit secret
 # kubectl create secret generic contour-data-values --from-file=values.yaml=$EXTENSIONS/ingress/contour/vsphere/contour-data-values.yaml -n tanzu-system-ingress -o yaml --dry-run=client | kubectl replace -f -
-kubectl apply -f  ingress/contour/contour-extension.yaml
+kubectl apply -f  $EXTENSIONS/ingress/contour/contour-extension.yaml
 
 # fluent-bit
 kubectl apply -f $EXTENSIONS/logging/fluent-bit/namespace-role.yaml
