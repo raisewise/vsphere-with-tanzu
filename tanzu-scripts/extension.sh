@@ -8,9 +8,7 @@
 
 EXTENSIONS=$HOME/Documents/vsphere-with-tanzu/tkg-extensions-v1.2.0+vmware.1/extensions
 
-kubectl apply -f $EXTENSIONS/../../certificate-contour/wild-tls.yaml
-kubectl apply -f $EXTENSIONS/../../certificate-contour/delegation.yaml
-
+# kubectl get clusterrolebindings | grep default-tkg-admin-privileged-binding
 kubectl create clusterrolebinding default-tkg-admin-privileged-binding --clusterrole=psp:vmware-system-privileged --group=system:authenticated
 
 kubectl apply -f $EXTENSIONS/tmc-extension-manager.yaml
@@ -25,6 +23,12 @@ kubectl create secret generic contour-data-values --from-file=values.yaml=$EXTEN
 # edit secret
 # kubectl create secret generic contour-data-values --from-file=values.yaml=$EXTENSIONS/ingress/contour/vsphere/contour-data-values.yaml -n tanzu-system-ingress -o yaml --dry-run=client | kubectl replace -f -
 kubectl apply -f  $EXTENSIONS/ingress/contour/contour-extension.yaml
+
+# certificate contour
+kubectl apply -f $EXTENSIONS/../../certificate-contour/wild-tls.yaml
+kubectl apply -f $EXTENSIONS/../../certificate-contour/delegation.yaml
+
+sleep 30
 
 # fluent-bit
 kubectl apply -f $EXTENSIONS/logging/fluent-bit/namespace-role.yaml
