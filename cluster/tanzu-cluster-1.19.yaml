@@ -8,7 +8,7 @@ spec:
     version: 1.19.7+vmware.1-tkg.1.fc82c41
   topology:
     controlPlane:
-      count: 1
+      count: 3
       class: best-effort-small
       storageClass: tanzu-storage-policy
       # volumes: 
