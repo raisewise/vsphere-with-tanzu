@@ -19,10 +19,10 @@ kubectl apply -f $EXTENSIONS/../cert-manager/
 # contour ingress
 # kubectl create secret docker-registry <secret name> --docker-server <image registry> --docker-username <registry ID> --docker-password <registry PWD> -n tanzu-system-ingress (필요 한 것인가??)
 kubectl apply -f $EXTENSIONS/ingress/contour/namespace-role.yaml
-kubectl create secret generic contour-data-values-lb --from-file=values.yaml=$EXTENSIONS/ingress/contour/vsphere/contour-data-values-lb.yaml -n tanzu-system-ingress
+kubectl create secret generic contour-data-values --from-file=values.yaml=$EXTENSIONS/ingress/contour/vsphere/contour-data-values.yaml -n tanzu-system-ingress
 # edit secret
 # kubectl create secret generic contour-data-values --from-file=values.yaml=$EXTENSIONS/ingress/contour/vsphere/contour-data-values.yaml -n tanzu-system-ingress -o yaml --dry-run=client | kubectl replace -f -
-kubectl apply -f  $EXTENSIONS/ingress/contour/contour-extension-lb.yaml
+kubectl apply -f  $EXTENSIONS/ingress/contour/contour-extension.yaml
 
 sleep 30
 
