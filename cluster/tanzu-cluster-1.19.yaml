@@ -24,7 +24,7 @@ spec:
         - name: containerd
           mountPath: /var/lib/containerd
           capacity:
-            storage: 16Gi
+            storage: 32Gi
   settings:
     storage:
       defaultClass: tanzu-storage-policy
