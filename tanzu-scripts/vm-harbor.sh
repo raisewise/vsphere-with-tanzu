@@ -15,13 +15,13 @@ stty -echo
 read -a DBPASSWD
 stty echo
 
-
+export INSTALL_PATH=$HOME/harbor
 
 wget https://github.com/goharbor/harbor/releases/download/v1.9.4/harbor-offline-installer-v1.9.4.tgz
 
 tar xvf harbor-offline-installer-v1.9.4.tgz
 
-cd harbor/
+cd $INSTALL_PATH
 
 # harbor.yml default
 hostname: reg.mydomain.com
@@ -32,4 +32,4 @@ harbor_admin_password: Harbor12345
 password: root123
 
 ./prepare --with-clair
-./install.sh --with-clair
+./install.sh --with-claird
