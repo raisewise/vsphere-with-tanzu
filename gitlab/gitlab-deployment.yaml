@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitlab
+  namespace: gitlab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitlab
+  template:
+    metadata:
+      labels:
+        app: gitlab
+    spec:
+      containers:
+      - image: gitlab/gitlab-ce
+        name: gitlab
+        ports:
+        - containerPort: 80
+        - containerPort: 443
+        - containerPort: 22
+        volumeMounts:
+          - mountPath: /etc/gitlab
+            name: gitlab-config-volume
+          - mountPath: /var/opt/gitlab
+            name: gitlab-data-volume
+      volumes:
+        - name: gitlab-config-volume
+          persistentVolumeClaim:
+            claimName: gitlab-config
+        - name: gitlab-data-volume
+          persistentVolumeClaim:
+            claimName: gitlab-data
