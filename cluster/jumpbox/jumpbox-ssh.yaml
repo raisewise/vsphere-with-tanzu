@@ -4,10 +4,10 @@ metadata:
   name: jumpbox
 spec:
   imagePullSecrets:
-  - name: embeded-harbor-secret
+  - name: vm-harbor
   containers:
   - name: jumpbox
-    image: "10.30.10.4/cnd-infra/photon-cm:3.0_dev"
+    image: "vm-harbor.cnd.lab/cnd-infra/photon-cm:3.0_dev"
     command: [ "/bin/bash", "-c", "--" ]
     args: [ "mkdir /root/.ssh; cp /root/ssh/ssh-privatekey /root/.ssh/id_rsa; chmod 600 /root/.ssh/id_rsa; while true; do sleep 30; done;" ]
     volumeMounts:
