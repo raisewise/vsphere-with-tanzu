@@ -1,17 +1,17 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: jenkins-test
+  name: jenkins
   namespace: jenkins
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: jenkins-test
+      app: jenkins
   template:
     metadata:
       labels:
-        app: jenkins-test
+        app: jenkins
     spec:
       securityContext:
         fsGroup: 1000
@@ -27,4 +27,4 @@ spec:
       volumes:
       - name: jenkins-home
         persistentVolumeClaim:
-          claimName: jenkins-pvc-test
+          claimName: jenkins-pvc
