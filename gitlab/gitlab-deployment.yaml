@@ -25,6 +25,9 @@ spec:
             name: gitlab-config-volume
           - mountPath: /var/opt/gitlab
             name: gitlab-data-volume
+#        initialRootPassword:
+#          secret: gitlab-root-password
+#          key: password
       volumes:
         - name: gitlab-config-volume
           persistentVolumeClaim:

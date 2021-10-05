@@ -1,7 +1,7 @@
 apiVersion: run.tanzu.vmware.com/v1alpha1
 kind: TanzuKubernetesCluster
 metadata:
-  name: cnd-cluster
+  name: cnd-cluster-network
   namespace: cnd-infra
 spec:
   distribution:
@@ -25,13 +25,13 @@ spec:
           mountPath: /var/lib/containerd
           capacity:
             storage: 32Gi
-  settings:
-    storage:
-      defaultClass: tanzu-storage-policy
-    network:
-      cni:
-        name: antrea
-      services:
-        cidrBlocks: ["20.20.16.0/21"]
-      pods:
-        cidrBlocks: ["20.20.0.0/21"]
+#  settings:
+#    storage:
+#      defaultClass: tanzu-storage-policy
+#    network:
+#      cni:
+#        name: antrea
+#      services:
+#        cidrBlocks: ["10.96.0.0/22"]
+#      pods:
+#        cidrBlocks: ["10.244.0.0/19"]

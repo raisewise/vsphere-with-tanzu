@@ -5,7 +5,7 @@ metadata:
   namespace: jenkins
 spec:
   accessModes:
-  - ReadWriteOnce
+  - ReadWriteMany
   resources:
     requests:
       storage: 20Gi

@@ -5,7 +5,7 @@ metadata:
   namespace: gitlab
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   resources:
     requests:
       storage: 10Gi
@@ -17,7 +17,7 @@ metadata:
   namespace: gitlab
 spec:
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   resources:
     requests:
       storage: 10Gi
