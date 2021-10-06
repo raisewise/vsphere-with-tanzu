@@ -1,0 +1,14 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: wildfly-ingress
+  namespace: default
+spec:
+  rules:
+  - host: test.nrson.co.kr
+    http:
+      paths:
+      - backend:
+          serviceName: wildfly
+          servicePort: 8080
+        path: /spring
