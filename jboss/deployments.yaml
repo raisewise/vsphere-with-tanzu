@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: wildfly
-        image: 192.168.56.100:5000/middleware/wildfly/wildfly_custom_image:latest
+        image: ext-harbor.cnd.lab/jboss/wildfly:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
