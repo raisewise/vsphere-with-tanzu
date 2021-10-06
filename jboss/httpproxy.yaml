@@ -1,14 +1,20 @@
-apiVersion: extensions/v1beta1
-kind: Ingress
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
 metadata:
-  name: wildfly-ingress
-  namespace: default
+  annotation:
+    projectcontour.io/tls-minimum-protocol-version: "TLSv1_3"
+    ingress.kubernetes.io/force-ssl-redirect: "false"
+    ingress.kubernetes.io/rewrite-target: "/"
+    kubernetes.io/ingress.class: "contour"
+  name: wildfly
 spec:
-  rules:
-  - host: test.nrson.co.kr
-    http:
-      paths:
-      - backend:
-          serviceName: wildfly
-          servicePort: 8080
-        path: /spring
+  virtualhost:
+    fqdn: jboss.cnd.lab
+    tls:
+      secretName: cnd-tls/wild-tls
+  routes:
+  - services:
+    - name: wildfly
+      port: 8080
+    conditions:
+    - prefix: /

@@ -16,9 +16,9 @@ spec:
     spec:
       containers:
       - name: wildfly
-        image: ext-harbor.cnd.lab/jboss/wildfly:latest
+        image: ext-harbor.cnd.lab/jboss/wildfly:v1.0
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
-      nodeSelector:
-        key: worker
+#      nodeSelector:
+#        key: worker
