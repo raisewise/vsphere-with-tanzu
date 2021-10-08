@@ -20,5 +20,5 @@ spec:
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
-#      nodeSelector:
-#        key: worker
+      nodeSelector:
+        key: worker
