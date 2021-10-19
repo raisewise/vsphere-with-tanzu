@@ -14,11 +14,18 @@ spec:
       labels:
         app: wildfly
     spec:
+      imagePullSecrets:
+      - name: ext-harbor
       containers:
       - name: wildfly
         image: ext-harbor.cnd.lab/jboss/wildfly:v1.0
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
+        resources:
+          requests:
+            cpu: "100m"
+          limits:
+            cpu: "300m"
       nodeSelector:
         key: worker
