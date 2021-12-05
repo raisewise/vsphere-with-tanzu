@@ -1,0 +1,18 @@
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  annotation:
+    projectcontour.io/tls-minimum-protocol-version: "TLSv1_3"
+    ingress.kubernetes.io/force-ssl-redirect: "false"
+    ingress.kubernetes.io/rewrite-target: "/"
+    kubernetes.io/ingress.class: "contour"
+  name: sample-app
+spec:
+  virtualhost:
+    fqdn: sample.cnd.lab
+  routes:
+  - services:
+    - name: sample-app
+      port: 80
+    conditions:
+    - prefix: /

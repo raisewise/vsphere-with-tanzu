@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: custom-metrics-apiserver
+  name: custom-metrics-apiserver
+  namespace: tanzu-system-monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: custom-metrics-apiserver
+  template:
+    metadata:
+      labels:
+        app: custom-metrics-apiserver
+      name: custom-metrics-apiserver
+    spec:
+      serviceAccountName: custom-metrics-apiserver
+      containers:
+      - name: custom-metrics-apiserver
+        image: k8s.gcr.io/prometheus-adapter/prometheus-adapter:v0.9.0
+        args:
+        - /adapter
+        - --secure-port=6443
+        - --cert-dir=/tmp/cert
+        - --logtostderr=true
+        - --prometheus-url=http://prometheus.nirs.lab:80
+        - --metrics-relist-interval=1m
+        - --v=4
+        - --config=/etc/adapter/config.yaml
+        ports:
+        - containerPort: 6443
+        volumeMounts:
+        - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+          name: custom-metrics-apiserver-token-6llc7
+          readOnly: true
+        - mountPath: /etc/adapter/
+          name: config
+          readOnly: true
+        - mountPath: /tmp
+          name: tmp
+      volumes:
+      - name: custom-metrics-apiserver-token-6llc7
+        secret:
+          defaultMode: 420
+          secretName: custom-metrics-apiserver-token-6llc7
+      - name: config
+        configMap:
+          name: adapter-config
+      - name: tmp
+        emptyDir: {}

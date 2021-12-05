@@ -1,0 +1,20 @@
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  annotations:
+  name: grafana
+  namespace: tanzu-monitoring
+spec:
+  routes:
+    - conditions:
+        - prefix: /
+      enableWebsockets: true
+      loadBalancerPolicy:
+        strategy: Cookie
+      services:
+        - name: grafana
+          port: 3000
+  virtualhost:
+    fqdn: grafana-test.cnd.lab
+    tls:
+      secretName: cnd-tls/wild-tls

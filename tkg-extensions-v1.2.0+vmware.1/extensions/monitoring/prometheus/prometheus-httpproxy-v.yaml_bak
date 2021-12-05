@@ -1,0 +1,63 @@
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  annotations:
+  name: prometheus
+  namespace: tanzu-system-monitoring
+spec:
+  routes:
+    - conditions:
+        - prefix: /
+      enableWebsockets: true
+      loadBalancerPolicy:
+        strategy: Cookie
+      services:
+        - name: prometheus-server
+          port: 9090
+  virtualhost:
+    fqdn: prometheus.cnd.lab
+    tls:
+      secretName: cnd-tls/wild-tls
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  annotations:
+  name: grafana
+  namespace: tanzu-system-monitoring
+spec:
+  routes:
+    - conditions:
+        - prefix: /
+      enableWebsockets: true
+      loadBalancerPolicy:
+        strategy: Cookie
+      services:
+        - name: grafana
+          port: 3000
+  virtualhost:
+    fqdn: grafana.cnd.lab
+    tls:
+      secretName: cnd-tls/wild-tls
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  annotations:
+  name: alertmanager
+  namespace: tanzu-system-monitoring
+spec:
+  routes:
+    - conditions:
+        - prefix: /
+      enableWebsockets: true
+      loadBalancerPolicy:
+        strategy: Cookie
+      services:
+        - name: prometheus-alertmanager
+          port: 9093
+  virtualhost:
+    fqdn: alertmanager.cnd.lab
+    tls:
+      secretName: cnd-tls/wild-tls
+
