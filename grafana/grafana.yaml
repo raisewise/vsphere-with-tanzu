@@ -11,6 +11,18 @@ spec:
     requests:
       storage: 1Gi
 ---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-credentials
+  namespace: tanzu-monitoring
+  labels:
+    app: grafana
+type: Opaque
+data:
+  admin-user: "YWRtaW4="
+  admin-password: "Vk13YXJlMSE="
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -32,7 +44,18 @@ spec:
         supplementalGroups:
           - 0
       containers:
-        - name: grafana
+        - env:
+          - name: GF_SECURITY_ADMIN_USER
+            valueFrom:
+              secretKeyRef:
+                key: admin-user
+                name: grafana-credentials
+          - name: GF_SECURITY_ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: admin-password
+                name: grafana-credentials
+          name: grafana
           image: grafana/grafana:7.5.2
           imagePullPolicy: IfNotPresent
           ports:
