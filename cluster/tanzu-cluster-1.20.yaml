@@ -1,11 +1,11 @@
 apiVersion: run.tanzu.vmware.com/v1alpha1
 kind: TanzuKubernetesCluster
 metadata:
-  name: cnd-cluster
+  name: workload01
   namespace: cnd-infra
 spec:
   distribution:
-    version: 1.20.2
+    version: 1.20.9
   topology:
     controlPlane:
       count: 1

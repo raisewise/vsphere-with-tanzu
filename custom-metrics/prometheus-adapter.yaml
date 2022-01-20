@@ -25,7 +25,7 @@ spec:
         - --secure-port=6443
         - --cert-dir=/tmp/cert
         - --logtostderr=true
-        - --prometheus-url=http://prometheus.nirs.lab:80
+        - --prometheus-url=https://prometheus.cnd.lab
         - --metrics-relist-interval=1m
         - --v=4
         - --config=/etc/adapter/config.yaml
@@ -33,7 +33,7 @@ spec:
         - containerPort: 6443
         volumeMounts:
         - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
-          name: custom-metrics-apiserver-token-6llc7
+          name: custom-metrics-apiserver-token-vvs7f 
           readOnly: true
         - mountPath: /etc/adapter/
           name: config
@@ -41,10 +41,10 @@ spec:
         - mountPath: /tmp
           name: tmp
       volumes:
-      - name: custom-metrics-apiserver-token-6llc7
+      - name: custom-metrics-apiserver-token-vvs7f 
         secret:
           defaultMode: 420
-          secretName: custom-metrics-apiserver-token-6llc7
+          secretName: custom-metrics-apiserver-token-vvs7f 
       - name: config
         configMap:
           name: adapter-config
