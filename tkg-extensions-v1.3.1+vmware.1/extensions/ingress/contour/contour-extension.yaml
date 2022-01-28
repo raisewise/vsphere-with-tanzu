@@ -23,6 +23,15 @@ spec:
           pathsFrom:
             - secretRef:
                 name: contour-data-values
+          paths:
+            static-ip-envoy.yml: |
+              #@ load("@ytt:overlay", "overlay")
+              #@ load("/values.star", "values")
+              #@overlay/match by=overlay.subset({"kind":"Service","metadata":{"name":"envoy"}})
+              ---
+              spec:
+                #@overlay/match missing_ok=True
+                loadBalancerIP: #@ values.envoy.service.loadBalancerIP
   deploy:
     - kapp:
         rawOptions: ["--wait-timeout=5m"]
