@@ -6,7 +6,7 @@
 # ! embeded harbor secret
 #   $ kubectl create secret docker-registry <secret name> --docker-server=<ip> --docker-username=<vCenter ID> --docker-password=<vCenter PWD>
 
-EXTENSIONS=$HOME/Documents/vsphere-with-tanzu/tkg-extensions-v1.2.0+vmware.1/extensions
+EXTENSIONS=$HOME/Github/vsphere-with-tanzu/tkg-extensions-v1.2.0+vmware.1/extensions
 
 # kubectl get clusterrolebindings | grep default-tkg-admin-privileged-binding
 kubectl create clusterrolebinding default-tkg-admin-privileged-binding --clusterrole=psp:vmware-system-privileged --group=system:authenticated
